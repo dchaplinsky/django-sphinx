@@ -1,7 +1,4 @@
-import select
-import socket
 import time
-import struct
 import warnings
 import operator
 import apis.current as sphinxapi
@@ -12,7 +9,7 @@ try:
 except ImportError:
     from django.utils import _decimal as decimal # for Python 2.3
 
-from django.db.models.query import QuerySet, Q
+from django.db.models.query import Q
 from django.conf import settings
 
 __all__ = ('SearchError', 'ConnectionError', 'SphinxSearch', 'SphinxRelation', 'SphinxQuerySet')
@@ -593,7 +590,15 @@ class SphinxQuerySet(object):
                 else:
                     for r in results['matches']:
                         r['id'] = unicode(r['id'])
-                    queryset = queryset.filter(pk__in=[r['id'] for r in results['matches']])
+
+                    ids = [r['id'] for r in results['matches']]
+                    queryset = queryset.filter(pk__in=ids).extra(
+                            select={'manual': 'FIELD(`%s`.%s,%s)' % (
+                                self.model._meta.db_table, 
+                                self.model._meta.pk.name, 
+                                ','.join(map(str, ids)))},
+                            order_by=['manual'])
+
                 queryset = dict([(', '.join([unicode(getattr(o, p.attname)) for p in pks]), o) for o in queryset])
 
                 if self._passages:
@@ -794,7 +799,12 @@ class SphinxRelation(SphinxSearch):
                     ids.append(value)
                 else:
                     ids.extend()
-            qs = self.get_query_set(self.model).filter(pk__in=set(ids))
+            qs = self.get_query_set(self.model).filter(pk__in=set(ids)).extra(
+                select={'manual': 'FIELD(`%s`.%s,%s)' % (
+                    self.model._meta.db_table, 
+                    self.model._meta.pk.name, 
+                    ','.join(map(str, ids)))},
+                order_by=['manual'])
             if self._select_related:
                 qs = qs.select_related(*self._select_related_fields,
                                        **self._select_related_args)
