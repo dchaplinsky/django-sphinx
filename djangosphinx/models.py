@@ -204,6 +204,7 @@ class SphinxQuerySet(object):
 
         self._groupby               = None
         self._sort                  = None
+        self._select                = None
         self._weights               = [1, 100]
 
         self._passages              = False
@@ -429,6 +430,10 @@ class SphinxQuerySet(object):
         if self._sort:
             params.append('sort=%s' % (self._sort,))
             client.SetSortMode(*self._sort)
+
+        if self._select:
+            params.append('select=%s' % (self._select,))
+            client.SetSelect(self._select)
         
         if isinstance(self._weights, dict):
             client.SetFieldWeights(self._weights)
@@ -590,15 +595,7 @@ class SphinxQuerySet(object):
                 else:
                     for r in results['matches']:
                         r['id'] = unicode(r['id'])
-
-                    ids = [r['id'] for r in results['matches']]
-                    queryset = queryset.filter(pk__in=ids).extra(
-                            select={'manual': 'FIELD(`%s`.%s,%s)' % (
-                                self.model._meta.db_table, 
-                                self.model._meta.pk.name, 
-                                ','.join(map(str, ids)))},
-                            order_by=['manual'])
-
+                    queryset = queryset.filter(pk__in=[r['id'] for r in results['matches']])
                 queryset = dict([(', '.join([unicode(getattr(o, p.attname)) for p in pks]), o) for o in queryset])
 
                 if self._passages:
@@ -799,12 +796,7 @@ class SphinxRelation(SphinxSearch):
                     ids.append(value)
                 else:
                     ids.extend()
-            qs = self.get_query_set(self.model).filter(pk__in=set(ids)).extra(
-                select={'manual': 'FIELD(`%s`.%s,%s)' % (
-                    self.model._meta.db_table, 
-                    self.model._meta.pk.name, 
-                    ','.join(map(str, ids)))},
-                order_by=['manual'])
+            qs = self.get_query_set(self.model).filter(pk__in=set(ids))
             if self._select_related:
                 qs = qs.select_related(*self._select_related_fields,
                                        **self._select_related_args)
